@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Benelux Rail Corridor: Technical Analysis & Feasibility Study</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400&display=swap');
+
+        :root {
+            --color-bg: #f3f4f6; /* Cool Gray 100 */
+            --color-card: #ffffff;
+            --color-text-primary: #111827; /* Gray 900 */
+            --color-text-secondary: #4b5563; /* Gray 600 */
+            --color-accent: #0284c7; /* Sky 600 - Transportation/Trust */
+            --color-accent-hover: #0369a1;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text-primary);
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Chart Container Styling - Strict Constraints */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Max width constraint */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height */
+            max-height: 400px; /* Max height constraint */
+            background: #fff;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+        }
+
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+
+        .nav-active {
+            border-bottom: 2px solid var(--color-accent);
+            color: var(--color-accent);
+            font-weight: 600;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .metric-card {
+            transition: all 0.3s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+    </style>
+
+    <!-- Chosen Palette: Corporate Transport Blue (Sky 600) on Cool Gray neutrals. 
+         Professional, clean, easy to read, reminiscent of NS/NMBS branding fusion. 
+    -->
+
+    <!-- Application Structure Plan:
+         1. Header/Nav: Quick jumps to Analysis, Feasibility, Strategy.
+         2. Intro: Brief context setting (Lelystad-Bxl & Bxl-Rotterdam context).
+         3. Tech Specs Module:
+            - Interactive toggle between Alstom ICNG and Traxx/I11.
+            - Charts: Radar comparison (Speed, Accel, Comfort, Reliability) & Speed Profile Line Chart.
+         4. Feasibility Simulator (The Core):
+            - Dropdown for Route (Eindhoven, Den Haag, Utrecht).
+            - *CRITICAL UPDATE*: Eindhoven logic includes "Direct Run" (No Reversal) parameter.
+            - Dynamic Metrics: Travel Time, Demand Score, Cost Efficiency.
+            - Visuals: Projected Ridership Bar Chart.
+         5. Strategy Module:
+            - Comparison of Operator Models (JV vs Open Access).
+            - Rolling Stock Recommendation engine based on route selection.
+    -->
+
+    <!-- Visualization & Content Choices:
+         1. Tech Specs: Radar Chart (Chart.js) best suited for multi-variable comparison (Speed vs Comfort).
+         2. Speed Profile: Line Chart (Chart.js) to show the 200km/h vs 160km/h impact on travel time.
+         3. Feasibility: Bar Chart (Chart.js) for Demand projections.
+         4. Interactive Panels: Text updates based on state (Route selection) to explain specific constraints (e.g., Voltage changeover).
+         5. Confirming NO SVG/Mermaid. Icons used are Unicode/CSS shapes.
+    -->
+
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-xl font-bold tracking-tight text-gray-900">BENELUX<span class="text-sky-600">LINK</span> ANALYSIS</span>
+                </div>
+                <div class="hidden sm:flex space-x-8">
+                    <button onclick="switchTab('tech')" id="nav-tech" class="nav-btn nav-active px-3 py-2 text-sm font-medium transition-colors hover:text-sky-600">Technical Analysis</button>
+                    <button onclick="switchTab('feasibility')" id="nav-feasibility" class="nav-btn px-3 py-2 text-sm font-medium transition-colors hover:text-sky-600 text-gray-500">Route Feasibility</button>
+                    <button onclick="switchTab('strategy')" id="nav-strategy" class="nav-btn px-3 py-2 text-sm font-medium transition-colors hover:text-sky-600 text-gray-500">Operator Strategy</button>
+                </div>
+                <!-- Mobile menu placeholder -->
+                <div class="flex items-center sm:hidden">
+                    <span class="text-xs text-gray-500">Interactive Report</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-12">
+
+        <!-- Intro Section -->
+        <section class="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
+            <h1 class="text-3xl font-bold text-gray-900 mb-4">Cross-Border Rolling Stock & Route Analysis</h1>
+            <p class="text-lg text-gray-600 leading-relaxed">
+                This report analyzes the technical capabilities of the <strong>Alstom Coradia Stream (ICNG)</strong> versus the <strong>Traxx MS Locomotives + I11 Coaches</strong>. It subsequently evaluates the commercial and operational feasibility of expanding direct Eurocity services from Brussels to key Dutch economic hubs: <strong>Eindhoven</strong>, <strong>Den Haag</strong>, and <strong>Utrecht</strong>.
+            </p>
+        </section>
+
+        <!-- SECTION 1: TECHNICAL ANALYSIS -->
+        <section id="tech-section" class="fade-in space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-end border-b border-gray-200 pb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Rolling Stock Comparison</h2>
+                    <p class="text-gray-500 mt-1 max-w-2xl">
+                        Technical evaluation of the current Eurocity Direct fleet (ICNG) vs. the classic Eurocity composition (Traxx + I11).
+                    </p>
+                </div>
+                <!-- Toggle Controls -->
+                <div class="bg-gray-100 p-1 rounded-lg flex space-x-1 mt-4 md:mt-0">
+                    <button onclick="updateTechView('icng')" id="btn-icng" class="px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-sky-600 transition-all">Alstom ICNG</button>
+                    <button onclick="updateTechView('traxx')" id="btn-traxx" class="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 transition-all">Traxx + I11</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Data Panel -->
+                <div class="lg:col-span-1 space-y-4">
+                    <div id="tech-details" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Visualization Panel -->
+                <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 mb-3 text-center">Performance Radar</h3>
+                        <div class="chart-container">
+                            <canvas id="techRadarChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 mb-3 text-center">Speed Profile (HSL-Zuid Segment)</h3>
+                        <div class="chart-container">
+                            <canvas id="speedProfileChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <h4 class="font-bold text-blue-900 text-sm uppercase">Analyst Note</h4>
+                <p class="text-blue-800 text-sm mt-1">
+                    While the Traxx/I11 formation offers superior seat comfort (legroom and ride stability), its 160 km/h limit creates a bottleneck on the HSL-Zuid. The ICNG's 200 km/h capability is critical for slot efficiency on the high-frequency Dutch network, despite slightly stiffer ride characteristics.
+                </p>
+            </div>
+        </section>
+
+        <!-- SECTION 2: FEASIBILITY STUDY -->
+        <section id="feasibility-section" class="hidden fade-in space-y-8">
+            <div class="border-b border-gray-200 pb-4">
+                <h2 class="text-2xl font-bold text-gray-900">Route Feasibility Simulator</h2>
+                <p class="text-gray-500 mt-1">
+                    Select a proposed route to simulate demand, operational constraints, and profitability.
+                </p>
+            </div>
+
+            <!-- Route Selector -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select Target Destination from Brussels Midi:</label>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button onclick="selectRoute('eindhoven')" id="btn-route-eindhoven" class="route-btn p-4 border-2 rounded-lg text-left hover:border-sky-500 hover:bg-sky-50 transition-all group">
+                        <div class="font-bold text-gray-900 group-hover:text-sky-700">Via Breda -> Eindhoven</div>
+                        <div class="text-xs text-gray-500 mt-1">Status: High Demand Corridor</div>
+                    </button>
+                    <button onclick="selectRoute('denhaag')" id="btn-route-denhaag" class="route-btn p-4 border-2 border-transparent bg-gray-50 rounded-lg text-left hover:border-sky-500 hover:bg-sky-50 transition-all">
+                        <div class="font-bold text-gray-900">Via Rotterdam -> Den Haag</div>
+                        <div class="text-xs text-gray-500 mt-1">Status: Short Extension</div>
+                    </button>
+                    <button onclick="selectRoute('utrecht')" id="btn-route-utrecht" class="route-btn p-4 border-2 border-transparent bg-gray-50 rounded-lg text-left hover:border-sky-500 hover:bg-sky-50 transition-all">
+                        <div class="font-bold text-gray-900">Via Rotterdam -> Utrecht</div>
+                        <div class="text-xs text-gray-500 mt-1">Status: High Capacity Corridor</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left: Route Metrics -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 metric-card">
+                        <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wider">Feasibility Score</h3>
+                        <div class="mt-2 flex items-baseline">
+                            <span id="feasibility-score" class="text-5xl font-extrabold text-gray-900">--</span>
+                            <span class="text-gray-500 ml-2 font-medium">/ 100</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 mt-4">
+                            <div id="score-bar" class="bg-sky-600 h-2.5 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="text-gray-900 font-bold mb-4">Operational Parameters</h3>
+                        <ul class="space-y-3 text-sm">
+                            <li class="flex justify-between">
+                                <span class="text-gray-600">Est. Travel Time:</span>
+                                <span id="val-time" class="font-mono font-bold text-gray-900">--:--</span>
+                            </li>
+                            <li class="flex justify-between">
+                                <span class="text-gray-600">Infrastructure:</span>
+                                <span id="val-infra" class="font-mono font-bold text-right text-gray-900 w-1/2">--</span>
+                            </li>
+                            <li class="flex justify-between">
+                                <span class="text-gray-600">Reversal:</span>
+                                <span id="val-reversal" class="font-mono font-bold text-gray-900">--</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Right: Analysis & Charts -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 id="route-title" class="text-xl font-bold text-gray-900 mb-2">Select a Route</h3>
+                        <p id="route-desc" class="text-gray-600 leading-relaxed mb-4">
+                            Detailed analysis will appear here covering demand drivers, infrastructure compatibility, and strategic fit.
+                        </p>
+                        
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <h4 class="font-bold text-gray-800 text-sm mb-2">Preferred Rolling Stock</h4>
+                            <p id="stock-recommendation" class="text-sm text-gray-700">--</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="text-sm font-semibold text-gray-900 mb-4">Projected Demand & Profitability (Year 1-5)</h3>
+                        <div class="chart-container">
+                            <canvas id="demandChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: STRATEGY & OPERATOR MODEL -->
+        <section id="strategy-section" class="hidden fade-in space-y-8">
+            <div class="border-b border-gray-200 pb-4">
+                <h2 class="text-2xl font-bold text-gray-900">Operator Model Strategy</h2>
+                <p class="text-gray-500 mt-1">
+                    Should these new services be run as a Joint Venture (NS/NMBS) or via Open Access?
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Joint Venture Model -->
+                <div class="bg-white p-8 rounded-xl shadow-sm border-t-4 border-blue-600">
+                    <div class="flex items-center mb-4">
+                        <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold mr-3">JV</div>
+                        <h3 class="text-xl font-bold text-gray-900">NS & NMBS Joint Venture</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-6 min-h-[60px]">
+                        The incumbent model. Historically stable but often lacks agility in pricing and route innovation.
+                    </p>
+                    
+                    <div class="space-y-4">
+                        <div class="flex items-start">
+                            <span class="text-green-500 mr-2 font-bold">+</span>
+                            <span class="text-sm text-gray-700"><strong>Integrated Ticketing:</strong> Seamless connection with domestic networks in BE and NL.</span>
+                        </div>
+                        <div class="flex items-start">
+                            <span class="text-green-500 mr-2 font-bold">+</span>
+                            <span class="text-sm text-gray-700"><strong>Resilience:</strong> Better handling of disruptions via large fleet pools.</span>
+                        </div>
+                        <div class="flex items-start">
+                            <span class="text-red-500 mr-2 font-bold">-</span>
+                            <span class="text-sm text-gray-700"><strong>Cost Structure:</strong> Higher overheads often lead to higher ticket prices.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Open Access Model -->
+                <div class="bg-white p-8 rounded-xl shadow-sm border-t-4 border-orange-500">
+                    <div class="flex items-center mb-4">
+                        <div class="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-700 font-bold mr-3">OA</div>
+                        <h3 class="text-xl font-bold text-gray-900">Private Open Access</h3>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-6 min-h-[60px]">
+                        Market challengers (e.g., Arriva, QBuzz, Flix) utilizing liberalized rail market rules to offer competitive services.
+                    </p>
+
+                    <div class="space-y-4">
+                        <div class="flex items-start">
+                            <span class="text-green-500 mr-2 font-bold">+</span>
+                            <span class="text-sm text-gray-700"><strong>Agility:</strong> Faster implementation of new niche routes (e.g., Eindhoven Direct).</span>
+                        </div>
+                        <div class="flex items-start">
+                            <span class="text-green-500 mr-2 font-bold">+</span>
+                            <span class="text-sm text-gray-700"><strong>Price:</strong> Yield management can offer significantly lower fares.</span>
+                        </div>
+                        <div class="flex items-start">
+                            <span class="text-red-500 mr-2 font-bold">-</span>
+                            <span class="text-sm text-gray-700"><strong>Risk:</strong> High barrier to entry (rolling stock acquisition for HSL-Zuid is difficult).</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 text-gray-200 p-6 rounded-lg mt-8">
+                <h4 class="font-bold text-white mb-2">Strategic Recommendation</h4>
+                <p class="text-sm leading-relaxed">
+                    For <strong>Brussels-Utrecht</strong> and <strong>Brussels-Den Haag</strong>, the operational complexity and integration with the high-frequency "Randstad" network heavily favor the <strong>NS/NMBS Joint Venture</strong> using the ICNG fleet. 
+                    <br><br>
+                    However, <strong>Brussels-Eindhoven</strong> represents a unique market ("Brainport" tech corridor) that is underserved. This route is an ideal candidate for an <strong>Open Access</strong> operator or a specialized "Intercity Direct" trial, provided they can lease multi-system rolling stock (ICNG or similar) capable of the HSL voltages (25kV) and conventional Dutch network (1.5kV).
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-gray-900 text-gray-400 py-8 border-t border-gray-800 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-xs">
+                Generated Interactive Report | Alstom Coradia vs Traxx Technical Analysis | Benelux Network Feasibility
+            </p>
+        </div>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // --- DATA STORE ---
+
+        const TRAIN_DATA = {
+            icng: {
+                name: "Alstom Coradia Stream (ICNG-B)",
+                image: "🚄 Aerodynamic EMU",
+                specs: [
+                    { label: "Max Speed", val: "200 km/h" },
+                    { label: "Power", val: "25kV AC / 1.5kV DC / 3kV DC" },
+                    { label: "Formation", val: "8-Car Articulated EMU" },
+                    { label: "Capacity", val: "413 Seats" },
+                    { label: "Systems", val: "ETCS L2, ATB-EG, TBL1+" }
+                ],
+                pros: ["High acceleration (Distributed Power)", "200km/h capability (HSL efficient)", "Level boarding", "Standardized fleet with NS"],
+                cons: ["Stiffer ride quality", "Interior space feels tighter than coaches", "Software integration complexity"]
+            },
+            traxx: {
+                name: "Traxx MS Loc + I11 Coaches",
+                image: "🚂 Loco-Hauled",
+                specs: [
+                    { label: "Max Speed", val: "160 km/h" },
+                    { label: "Power", val: "Multi-System Locomotive" },
+                    { label: "Formation", val: "Loco + 6/7/8 Coaches" },
+                    { label: "Capacity", val: "Flexible (~400-500)" },
+                    { label: "Systems", val: "ETCS, ATB, TBL1+" }
+                ],
+                pros: ["Superior seat pitch & comfort (I11)", "Quiet interior (loco separate)", "Flexible capacity"],
+                cons: ["Limited to 160km/h (HSL bottleneck)", "Slower acceleration", "Push-pull reliability issues"]
+            }
+        };
+
+        const ROUTE_DATA = {
+            eindhoven: {
+                title: "Brussels Midi ↔ Eindhoven (via Breda)",
+                desc: "Connecting the European capital with the 'Brainport' tech hub. Crucially, this model assumes a direct run-through at Breda (no reversal), utilizing the connection curve between HSL-Zuid and the Brabant route. It will follow a route similar to the Eurocity uptil Breda, with the detour at Brussels Airport being optional and subject to scheduling. After Breda, it should stop in Tilburg before terminating at Eindhoven.",
+                score: 85,
+                time: "1h 35m",
+                infra: "HSL-Zuid + Conventional (1.5kV)",
+                reversal: "None (Direct Routing)",
+                stock: "Alstom ICNG-B (Must handle 25kV HSL & 1.5kV Brabant route without loco change)",
+                demandData: [1200, 1500, 2100, 2800, 3200], // Growing tech sector demand
+                colors: { bg: 'rgba(2, 132, 199, 0.2)', border: '#0284c7' }
+            },
+            denhaag: {
+                title: "Brussels Midi ↔ Den Haag Centraal",
+                desc: "Connecting the seat of the Dutch government and international courts with the EU capital. Branches off the HSL at Rotterdam. It could be also an extension of the existing Eurocity Service with a stop in Delft and Den Haag HS if necessary.",
+                score: 78,
+                time: "1h 45m",
+                infra: "HSL-Zuid to R'dam + Conventional",
+                reversal: "None (Terminus)",
+                stock: "Traxx+I11 feasible (short non-HSL leg), but ICNG preferred for fleet uniformity.",
+                demandData: [1800, 1900, 1950, 2000, 2100], // Stable gov demand
+                colors: { bg: 'rgba(234, 88, 12, 0.2)', border: '#ea580c' }
+            },
+            utrecht: {
+                title: "Brussels Midi ↔ Utrecht Centraal",
+                desc: "Extending the Rotterdam service to the central rail hub of the Netherlands. High capacity corridor.After Rotterdam Centraal it should stop in Rotterdam Alexander, Gouda before terminating at Utrecht Centraal.",
+                score: 92,
+                time: "1h 55m",
+                infra: "HSL-Zuid + 4-Track Mainline",
+                reversal: "None",
+                stock: "Alstom ICNG-B (Maximize slot efficiency on busy R'dam-Utrecht leg)",
+                demandData: [2500, 2800, 3100, 3500, 4000], // High general demand
+                colors: { bg: 'rgba(22, 163, 74, 0.2)', border: '#16a34a' }
+            }
+        };
+
+        // --- STATE & CHARTS ---
+        let charts = { radar: null, speed: null, demand: null };
+
+        // --- FUNCTIONS ---
+
+        function switchTab(tabId) {
+            // UI Toggles
+            ['tech', 'feasibility', 'strategy'].forEach(t => {
+                document.getElementById(`${t}-section`).classList.add('hidden');
+                const btn = document.getElementById(`nav-${t}`);
+                btn.classList.remove('nav-active', 'text-sky-600');
+                btn.classList.add('text-gray-500');
+            });
+
+            document.getElementById(`${tabId}-section`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.classList.add('nav-active', 'text-sky-600');
+            activeBtn.classList.remove('text-gray-500');
+
+            // Init Charts if first view
+            if(tabId === 'tech' && !charts.radar) initTechCharts();
+            if(tabId === 'feasibility' && !charts.demand) selectRoute('eindhoven');
+        }
+
+        function updateTechView(trainKey) {
+            // Button Styles
+            const btnIcng = document.getElementById('btn-icng');
+            const btnTraxx = document.getElementById('btn-traxx');
+            
+            if(trainKey === 'icng') {
+                btnIcng.classList.add('bg-white', 'shadow-sm', 'text-sky-600');
+                btnIcng.classList.remove('text-gray-500', 'bg-transparent');
+                btnTraxx.classList.remove('bg-white', 'shadow-sm', 'text-sky-600');
+                btnTraxx.classList.add('text-gray-500');
+            } else {
+                btnTraxx.classList.add('bg-white', 'shadow-sm', 'text-sky-600');
+                btnTraxx.classList.remove('text-gray-500', 'bg-transparent');
+                btnIcng.classList.remove('bg-white', 'shadow-sm', 'text-sky-600');
+                btnIcng.classList.add('text-gray-500');
+            }
+
+            // Update Content
+            const data = TRAIN_DATA[trainKey];
+            const container = document.getElementById('tech-details');
+            
+            let specsHtml = data.specs.map(s => `
+                <div class="flex justify-between py-2 border-b border-gray-50 last:border-0">
+                    <span class="text-gray-500 text-sm">${s.label}</span>
+                    <span class="text-gray-900 font-mono text-sm font-bold text-right">${s.val}</span>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="bg-gray-50 p-6 border-b border-gray-100">
+                    <div class="text-4xl mb-2">${data.image}</div>
+                    <h3 class="text-xl font-bold text-gray-900">${data.name}</h3>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div>
+                        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Specifications</h4>
+                        ${specsHtml}
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-green-50 p-3 rounded border border-green-100">
+                            <h5 class="text-green-800 font-bold text-xs mb-2">PROS</h5>
+                            <ul class="text-xs text-green-700 space-y-1 list-disc list-inside">
+                                ${data.pros.map(p => `<li>${p}</li>`).join('')}
+                            </ul>
+                        </div>
+                        <div class="bg-red-50 p-3 rounded border border-red-100">
+                            <h5 class="text-red-800 font-bold text-xs mb-2">CONS</h5>
+                            <ul class="text-xs text-red-700 space-y-1 list-disc list-inside">
+                                ${data.cons.map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Update Charts
+            if(charts.radar) updateRadar(trainKey);
+        }
+
+        function initTechCharts() {
+            const ctxRadar = document.getElementById('techRadarChart').getContext('2d');
+            charts.radar = new Chart(ctxRadar, {
+                type: 'radar',
+                data: {
+                    labels: ['Max Speed', 'Acceleration', 'Seat Comfort', 'Ride Stability', 'Reliability', 'Boarding Ease'],
+                    datasets: [{
+                        label: 'ICNG-B',
+                        data: [9, 9, 6, 7, 6, 9],
+                        backgroundColor: 'rgba(2, 132, 199, 0.2)',
+                        borderColor: '#0284c7',
+                        pointBackgroundColor: '#0284c7'
+                    },
+                    {
+                        label: 'Traxx + I11',
+                        data: [6, 4, 9, 9, 8, 4],
+                        backgroundColor: 'rgba(75, 85, 99, 0.2)',
+                        borderColor: '#4b5563',
+                        pointBackgroundColor: '#4b5563'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { r: { suggestedMin: 0, suggestedMax: 10 } }
+                }
+            });
+
+            const ctxLine = document.getElementById('speedProfileChart').getContext('2d');
+            charts.speed = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: ['0km', '20km', '50km', '80km', '100km'],
+                    datasets: [{
+                        label: 'ICNG (200km/h)',
+                        data: [0, 160, 200, 200, 200],
+                        borderColor: '#0284c7',
+                        tension: 0.1
+                    }, {
+                        label: 'Traxx (160km/h)',
+                        data: [0, 140, 160, 160, 160],
+                        borderColor: '#4b5563',
+                        borderDash: [5, 5],
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { title: {display: true, text: 'Speed (km/h)'} } }
+                }
+            });
+            
+            // Initial view population
+            updateTechView('icng');
+        }
+
+        function updateRadar(trainKey) {
+            // Visual feedback handled by showing both datasets. 
+            // We could highlight one, but comparison is key here.
+            charts.radar.update();
+        }
+
+        function selectRoute(routeKey) {
+            const data = ROUTE_DATA[routeKey];
+            
+            // Highlight Buttons
+            document.querySelectorAll('.route-btn').forEach(b => {
+                b.classList.remove('border-sky-500', 'bg-sky-50');
+                b.classList.add('border-transparent', 'bg-gray-50');
+            });
+            const btn = document.getElementById(`btn-route-${routeKey}`);
+            btn.classList.remove('border-transparent', 'bg-gray-50');
+            btn.classList.add('border-sky-500', 'bg-sky-50');
+
+            // Text Updates
+            document.getElementById('route-title').innerText = data.title;
+            document.getElementById('route-desc').innerText = data.desc;
+            document.getElementById('stock-recommendation').innerText = data.stock;
+            document.getElementById('val-time').innerText = data.time;
+            document.getElementById('val-infra').innerText = data.infra;
+            document.getElementById('val-reversal').innerText = data.reversal;
+            document.getElementById('feasibility-score').innerText = data.score;
+
+            // Bar Animation
+            const bar = document.getElementById('score-bar');
+            bar.style.width = '0%';
+            setTimeout(() => { bar.style.width = `${data.score}%`; }, 100);
+
+            // Chart Update
+            updateDemandChart(data);
+        }
+
+        function updateDemandChart(data) {
+            const ctx = document.getElementById('demandChart').getContext('2d');
+            
+            if(charts.demand) charts.demand.destroy();
+
+            charts.demand = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'],
+                    datasets: [{
+                        label: 'Projected Daily Ridership',
+                        data: data.demandData,
+                        backgroundColor: data.colors.bg,
+                        borderColor: data.colors.border,
+                        borderWidth: 2,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.parsed.y + " Passengers";
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Initialize on Load
+        document.addEventListener('DOMContentLoaded', () => {
+            switchTab('tech');
+        });
+
+    </script>
+</body>
+</html>
